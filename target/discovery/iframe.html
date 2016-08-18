@@ -1,0 +1,68 @@
+<!doctype html>
+<html class="no-js" lang="">
+  <head>
+      <meta charset="utf-8">
+      <meta http-equiv="x-ua-compatible" content="ie=edge">
+      <title></title>
+      <meta name="description" content="">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+  </head>
+  <body>
+    <script>
+      var allowedOriginSuffix = '.okta.io:1804';
+
+      function isInIframe() {
+          try {
+              return window.self !== window.top;
+          } catch (e) {
+              return true;
+          }
+      }
+
+      function receiveMessage(event) {
+        console.log('received message from %s => %o', event.origin, event);
+        // Only process events from whitelisted origins!
+        if (event.origin.startsWith('http://') && (event.origin.endsWith(allowedOriginSuffix))) {
+          if (event.data && event.data.type) {
+              if (event.data.type === 'getAccounts') {
+                  var accounts = window.localStorage.getItem('okta_accounts');
+                  accounts = accounts == "[object Object]" ? new Object() : accounts;
+                  accounts = !jQuery.isEmptyObject(accounts) ? JSON.parse(accounts) : new Object();
+                  console.log('saved accounts %o', accounts);
+                  var parentWindow = window.isInIframe() ? window.parent : window.opener;
+                  parentWindow.postMessage(accounts, event.origin);
+              } else if (event.data.type === 'deleteAccount') {
+                  var accounts = window.localStorage.getItem('okta_accounts');
+                  accounts = accounts ? JSON.parse(accounts) : {};
+                  if (accounts[event.data.origin] != null) {
+                      delete accounts[event.data.origin];
+                      window.localStorage.setItem('okta_accounts', accounts);
+                  }
+                  console.log('delete account %o', accounts);
+                  var parentWindow = window.isInIframe() ? window.parent : window.opener;
+                  parentWindow.postMessage(accounts, event.origin);
+              } else if (event.data.type === 'login') {
+                  var accounts = window.localStorage.getItem('okta_accounts');
+                  accounts = accounts ? JSON.parse(accounts) : {};
+                  accounts[event.origin] = {
+                    login: event.data.login,
+                    displayName: event.data.displayName,
+                    lastUpdated: new Date().toISOString()
+                  }
+                  accounts = JSON.stringify(accounts);
+                  console.log('updated accounts %s', accounts);
+                  window.localStorage.setItem('okta_accounts', accounts);
+                  event.source.postMessage({
+                    messageType: 'processed_login'
+                  }, event.origin);
+              }
+          }
+        }
+      }
+
+      window.addEventListener("message", receiveMessage, false);
+    </script>
+  </body>
+
+
